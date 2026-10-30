@@ -342,12 +342,6 @@ Choices made where the brief left room, with the reason:
 32. **Sounds are synthesized** with Web Audio (noise, filters and oscillators), so there are no audio files and no network requests. They are off by default and remembered per device. Browsers only allow sound after a click, so background sound starts on your first click on the page.
 33. **Turn notifications** use the browser's Notification API, which needs a secure page: they work with the `127.0.0.1` link, and on a phone over LAN only the tab title flashes.
 
-## What was tested, and what wasn't
-
-- Unit and integration tests: 71 tests, all passing on Windows (Node 24). The integration test spawns the real server over stdio and drives all 4 tools.
-- The packed `.mcpb` was unpacked and driven over stdio (`scripts/smoke-mcpb.mjs`).
-- Both cards were rendered and clicked through in the official MCP Apps **basic-host** reference host: map, hover distances, click intent and **Say it in chat**, zoom, fullscreen, the older-card marker, dice animation, advantage, natural 20, the tray and secret rolls.
-- **Not tested: installing into Claude Desktop.** That has to be checked by hand (see the checklist in the release notes / below).
 
 ### Manual check in Claude Desktop
 
