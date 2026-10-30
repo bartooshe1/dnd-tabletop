@@ -17,7 +17,7 @@ import { PageServer } from "./http.js";
 import { openBrowser } from "./browser.js";
 import { INSTRUCTIONS, MAP_DESC, NOTES_DESC, ROLL_DESC, TURN_DESC } from "./descriptions.js";
 
-export const VERSION = "0.4.3";
+export const VERSION = "0.4.4";
 const text = (t, extra = {}) => ({ content: [{ type: "text", text: t }], ...extra });
 
 function pageHtml() {

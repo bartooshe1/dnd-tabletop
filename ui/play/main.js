@@ -27,7 +27,8 @@ const store = {
   },
 };
 const TEXT_SIZES = [0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
-const S = { token: params.get("t") || null, connected: false, everConnected: false, settings: {}, state: {}, map: null, typing: null, rollsSeen: new Set(), lastChatId: 0 };
+// a link copied from a terminal can pick up spaces, line breaks or a trailing ")" or "."
+const S = { token: (params.get("t") ?? "").replace(/[^\w-]/g, "") || null, connected: false, everConnected: false, settings: {}, state: {}, map: null, typing: null, rollsSeen: new Set(), lastChatId: 0 };
 
 // ---------- markdown subset (built with DOM nodes, never innerHTML) ----------
 function inline(text) {
@@ -192,15 +193,40 @@ function connect() {
     if (es.readyState === EventSource.CLOSED) {
       // a few quick retries first (switching phone mode restarts the server), then give up slowly
       S.fails = (S.fails ?? 0) + 1;
-      if (S.fails >= 4) showBanner(S.everConnected ? "Lost the game. Reopen the link from Claude Code." : "This page needs the link from Claude Code.", "warn");
+      if (S.fails >= 4) explainOffline();
       else showBanner(S.switching ? "Switching phone play…" : "Reconnecting…", "info");
       setTimeout(connect, S.fails < 4 ? 700 : 4000);
     } else showBanner(S.switching ? "Switching phone play…" : "Reconnecting…", "info");
   };
 }
 
+/** Why can't we connect? Ask the server (if it answers at all) whether our link is right. */
+async function explainOffline() {
+  let r = null;
+  try {
+    r = await fetch(`/hello?t=${encodeURIComponent(S.token ?? "")}`, { cache: "no-store" });
+  } catch {
+    return showBanner(
+      S.everConnected
+        ? "Lost the game. Is Claude Code still running on the computer? If you're on a phone, check it's on the same Wi-Fi."
+        : "Can't reach the game. Is Claude Code still running on the computer, and is this device on the same Wi-Fi?",
+      "warn",
+    );
+  }
+  if (r.status === 403 || !(await r.json().catch(() => ({}))).ok) {
+    return showBanner("This link's code doesn't match the game (it's old or was cut off when copied). On the game computer open ⚙ Settings and scan the QR code again, or use the newest link from Claude Code.", "warn");
+  }
+  showBanner("Reconnecting…", "info");
+}
+
 function applySnapshot(s) {
-  if (s.token) S.token = s.token;
+  if (s.token && s.token !== S.token) {
+    // opened with an old or half-copied link on the game computer: show the real one in the address bar
+    S.token = s.token;
+    const url = new URL(location.href);
+    url.searchParams.set("t", s.token);
+    history.replaceState(null, "", url);
+  }
   S.fails = 0;
   S.switching = false;
   S.everConnected = true;

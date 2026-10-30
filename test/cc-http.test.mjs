@@ -16,9 +16,10 @@ after(async () => {
   for (const s of servers) await s.close();
 });
 
-async function setup({ lan = false } = {}) {
+async function setup({ lan = false, trustLoopback = false } = {}) {
   const dataDir = tmpDir();
-  const config = { dataDir, units: "metric", detail: "lean", waitMs: 5000, idleStop: 3, port: nextPort, lan, lanBind: "127.0.0.1", openBrowser: false };
+  // trustLoopback=false: test requests come from this computer, but must be held to the LAN rules
+  const config = { dataDir, units: "metric", detail: "lean", waitMs: 5000, idleStop: 3, port: nextPort, lan, lanBind: "127.0.0.1", openBrowser: false, trustLoopback };
   nextPort += 3;
   const table = new Table(config, { mode: "cc" });
   const game = new Game(table, config);
@@ -210,4 +211,18 @@ test("turning phone play on from the page: the reply arrives, the server comes b
   again.close();
   sse.close();
   assert.equal(JSON.parse(fs.readFileSync(path.join(game.config.dataDir, "settings.json"), "utf8")).lan, true);
+});
+
+test("on the game computer an old or broken link still works (the page learns the real one); other devices still need it", async () => {
+  const { game, page, origin } = await setup({ lan: true, trustLoopback: true });
+  game.newCampaign();
+  assert.equal((await fetch(`${origin}/?t=old-or-cut-off`)).status, 200);
+  const sse = await connectSse(`${origin}/events?t=old-or-cut-off`);
+  assert.equal((await sse.next("snapshot")).data.token, page.token, "the snapshot carries the real token");
+  sse.close();
+  assert.deepEqual(await (await fetch(`${origin}/hello?t=old-or-cut-off`)).json(), { ok: false, lan: true });
+  assert.deepEqual(await (await fetch(`${origin}/hello?t=${page.token}`)).json(), { ok: true, lan: true });
+  assert.equal((await post(origin, "/api/say", { text: "hi" }, { token: "old-or-cut-off" })).status, 403, "writes still need the real token");
+  // a LAN-style Host on a loopback socket is not trusted
+  for (const ip of lanAddresses().slice(0, 1)) assert.equal(await raw(page.port, { path: "/events", headers: { host: `${ip}:${page.port}` } }), 403);
 });

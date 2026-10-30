@@ -26,6 +26,8 @@ export function lanAddresses() {
   return out;
 }
 
+const isLoopback = (a) => typeof a === "string" && (a === "::1" || a.startsWith("127.") || a.startsWith("::ffff:127."));
+
 /** This computer's mDNS name ("bar-pc.local"), if it is a plain host name. */
 export function localName() {
   const n = os.hostname().toLowerCase().replace(/\.local$/, "");
@@ -191,11 +193,14 @@ export class PageServer {
     if (!this.#hostOk(host)) return res.writeHead(421, SECURITY_HEADERS).end("unknown host");
     const url = new URL(req.url, `http://${host}`);
     if (req.method === "GET" && url.pathname === "/__instance") return res.writeHead(200, { ...SECURITY_HEADERS, "content-type": "text/plain" }).end(this.instance);
-    const isLocalHost = !this.lan || /^(127\.0\.0\.1|localhost|\[::1\]):/.test(host);
-    // LAN mode: every request carries the token. Local mode: reads are open, writes need it.
+    // A request really made on this computer (loopback socket AND a loopback Host) is treated like
+    // local mode even in LAN mode: reads are open and the page learns the token from the snapshot,
+    // so an old or half-copied link still works here. Other devices always need the token.
+    const fromHere = this.config.trustLoopback !== false && isLoopback(req.socket.remoteAddress) && /^(127\.0\.0\.1|localhost|\[::1\]):/.test(host);
     const tokenOk = same(url.searchParams.get("t") ?? req.headers["x-dnd-token"], this.token);
-    if (this.lan && !tokenOk && !(isLocalHost && req.method === "GET" && url.pathname === "/")) {
-      return res.writeHead(403, SECURITY_HEADERS).end("token required");
+    if (this.lan && !tokenOk && !fromHere) return res.writeHead(403, SECURITY_HEADERS).end("token required");
+    if (req.method === "GET" && url.pathname === "/hello") {
+      return res.writeHead(200, { ...SECURITY_HEADERS, "content-type": "application/json" }).end(JSON.stringify({ ok: tokenOk, lan: this.lan }));
     }
 
     if (req.method === "GET" && url.pathname === "/") {
