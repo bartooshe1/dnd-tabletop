@@ -190,14 +190,19 @@ function connect() {
     statusEl.textContent = "offline";
     statusEl.className = "status off";
     if (es.readyState === EventSource.CLOSED) {
-      showBanner(S.everConnected ? "Lost the game. Reopen the link from Claude Code." : "This page needs the link from Claude Code.", "warn");
-      setTimeout(connect, 4000);
-    } else showBanner("Reconnecting…", "info");
+      // a few quick retries first (switching phone mode restarts the server), then give up slowly
+      S.fails = (S.fails ?? 0) + 1;
+      if (S.fails >= 4) showBanner(S.everConnected ? "Lost the game. Reopen the link from Claude Code." : "This page needs the link from Claude Code.", "warn");
+      else showBanner(S.switching ? "Switching phone play…" : "Reconnecting…", "info");
+      setTimeout(connect, S.fails < 4 ? 700 : 4000);
+    } else showBanner(S.switching ? "Switching phone play…" : "Reconnecting…", "info");
   };
 }
 
 function applySnapshot(s) {
   if (s.token) S.token = s.token;
+  S.fails = 0;
+  S.switching = false;
   S.everConnected = true;
   showBanner("");
   finishTyping();
@@ -679,7 +684,16 @@ function renderSettings() {
     h(
       "label",
       { class: "row" },
-      h("input", { type: "checkbox", checked: !!s[key], onchange: (e) => api("/api/settings", { [key]: e.target.checked }).then((r) => r && setSettings(r)) }),
+      h("input", {
+        type: "checkbox",
+        checked: !!s[key],
+        onchange: (e) => {
+          // remember the choice right away: switching phone play restarts the server, and the reply can get lost
+          S.settings = { ...S.settings, [key]: e.target.checked };
+          if (key === "lan") S.switching = true;
+          api("/api/settings", { [key]: e.target.checked }).then((r) => r && setSettings(r));
+        },
+      }),
       h("span", {}, h("b", {}, label), hint ? h("span", { class: "muted" }, ` ${hint}`) : null),
     );
   const units = h(

@@ -48,7 +48,8 @@ export class PageServer {
     this.server = null;
     for (const ev of EVENTS) game.on(ev, (data) => this.broadcast(ev, ev === "settings" ? this.settingsPayload(data) : data));
     game.on("reset", () => this.broadcastSnapshot());
-    game.on("lan", (on) => this.setLan(on).catch((e) => this.log(`LAN switch failed: ${e.message}`)));
+    // after the settings reply has gone out: restarting the listener must not cut it off
+    game.on("lan", (on) => setTimeout(() => this.setLan(on).catch((e) => this.log(`LAN switch failed: ${e.message}`)), 150));
   }
 
   get localUrl() {
@@ -109,13 +110,18 @@ export class PageServer {
     throw new Error(`no free port from ${this.config.port} to ${this.config.port + 20}`);
   }
 
-  async #isMe(port) {
-    try {
-      const r = await fetch(`http://127.0.0.1:${port}/__instance`, { signal: AbortSignal.timeout(1500) });
-      return r.ok && (await r.text()) === this.instance;
-    } catch {
-      return false;
-    }
+  /** Ask 127.0.0.1:port who it is, on a fresh socket (a pooled one may lead to a server we just closed). */
+  #isMe(port) {
+    return new Promise((resolve) => {
+      const req = http.get({ host: "127.0.0.1", port, path: "/__instance", agent: false, headers: { connection: "close" }, timeout: 1500 }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => (body += c));
+        res.on("end", () => resolve(res.statusCode === 200 && body === this.instance));
+      });
+      req.on("timeout", () => req.destroy());
+      req.on("error", () => resolve(false));
+    });
   }
 
   #listen(host, port) {
@@ -135,11 +141,19 @@ export class PageServer {
 
   async setLan(on) {
     if (!!on === this.lan) return;
+    const was = this.lan;
     this.lan = !!on;
     if (!this.server) return;
     await this.close();
-    await this.start();
-    this.broadcast("settings", this.settingsPayload());
+    try {
+      await this.start();
+    } catch (e) {
+      // the other mode can't listen (port taken?): stay playable the way it was, and say so
+      this.log(`LAN switch failed: ${e.message}`);
+      this.lan = was;
+      await this.start();
+      this.game.setSettings({ lan: was });
+    }
   }
 
   async close() {
@@ -147,7 +161,10 @@ export class PageServer {
     this.clients.clear();
     const srv = this.server;
     this.server = null;
-    if (srv) await new Promise((r) => srv.close(() => r()));
+    if (!srv) return;
+    const done = new Promise((r) => srv.close(() => r()));
+    srv.closeAllConnections?.(); // browsers keep idle keep-alive sockets open; don't wait for them
+    await done;
   }
 
   broadcast(event, data) {

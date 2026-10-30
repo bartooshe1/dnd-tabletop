@@ -193,3 +193,21 @@ test("the page link stays the same between sessions; 'Make a new link' replaces 
   assert.equal(fs.readFileSync(path.join(game.config.dataDir, "page-token"), "utf8"), token, "the new link is kept for next time");
   sse.close();
 });
+
+test("turning phone play on from the page: the reply arrives, the server comes back in LAN mode, and it's remembered", async () => {
+  const { game, page, origin } = await setup();
+  game.newCampaign();
+  const sse = await connectSse(`${origin}/events`);
+  const { token } = (await sse.next("snapshot")).data;
+  const r = await post(origin, "/api/settings", { lan: true }, { token });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).lan, true, "the page is told right away");
+  for (let i = 0; i < 40 && !(page.lan && page.server?.listening); i++) await new Promise((ok) => setTimeout(ok, 50));
+  assert.ok(page.lan && page.server.listening, "the listener restarted in LAN mode");
+  assert.equal((await fetch(`${origin}/events`)).status, 403, "LAN mode: reads need the token now");
+  const again = await connectSse(`${origin}/events?t=${token}`);
+  assert.equal((await again.next("snapshot")).data.settings.lan, true, "a reconnecting page sees it switched on");
+  again.close();
+  sse.close();
+  assert.equal(JSON.parse(fs.readFileSync(path.join(game.config.dataDir, "settings.json"), "utf8")).lan, true);
+});
