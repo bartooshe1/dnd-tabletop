@@ -1,0 +1,54 @@
+:root {
+  --bg: #15171c;
+  --panel: #1b1e24;
+  --line: #2a2e36;
+  --ink: #e8e3d6;
+  --muted: #9a9486;
+  --gold: #d4a64a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: transparent; color: var(--ink); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+html.fs, html.fs body { height: 100%; }
+html.fs .card { height: 100vh; border-radius: 0; border: 0; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+.title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.name { font-weight: 650; font-size: 14px; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.chip { font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.old-chip { display: none; }
+.card.old .old-chip { display: inline-block; }
+.card.old .stage { opacity: .8; }
+.tools { display: flex; gap: 4px; flex: none; }
+button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: #3d4350; background: #222630; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, canvas:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.tb { min-width: 28px; height: 26px; padding: 0 8px; font-size: 13px; }
+.caption { padding: 0 10px 6px; color: #cfc7b3; font-style: italic; font-size: 12.5px; }
+.caption[hidden] { display: none; }
+.stage { position: relative; height: 220px; background: #0c0d10; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); touch-action: none; }
+canvas { display: block; cursor: crosshair; }
+.tip { position: absolute; display: none; pointer-events: none; background: rgba(16,18,22,.96); border: 1px solid #3a3f4a; border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 260px; box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 2; }
+.tip-head { margin-bottom: 2px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.muted { color: var(--muted); }
+.empty { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; gap: 4px; color: var(--ink); }
+.empty-icon { font-size: 30px; opacity: .8; }
+.card.is-empty .empty { display: flex; }
+.card.is-empty canvas, .card.is-empty .tools { display: none; }
+.card.is-empty .stage { height: 160px; }
+.card.loading .stage::after { content: "Loading map…"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.card.loading canvas { visibility: hidden; }
+footer { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: #cfc7b3; }
+.lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; border: 1px solid rgba(255,255,255,.12); }
+.sep { width: 1px; height: 12px; background: var(--line); align-self: center; }
+.intent[hidden] { display: none; }
+.intent-row { display: flex; gap: 6px; }
+.intent-text { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: #0f1115; border: 1px solid #3a3f4a; border-radius: 7px; padding: 6px 8px; }
+.send { padding: 0 12px; height: 31px; background: #2b3a55; border-color: #3d5278; font-weight: 600; white-space: nowrap; }
+.intent-note { color: var(--muted); font-size: 11.5px; min-height: 0; }
+.intent-note:empty { display: none; }

@@ -1,0 +1,17 @@
+{
+ "name": "Crypt",
+ "description": "pillared crypt with sarcophagi (altar), statues, stairs up",
+ "scale": 1.5,
+ "rows": [
+  "############",
+  "#A..O..O..A#",
+  "#..........#",
+  "#.A.O..O.A.#",
+  "#..........#",
+  "#.A.O..O.A.#",
+  "#..........#",
+  "#....SS....#",
+  "#..........#",
+  "#####<<#####"
+ ]
+}

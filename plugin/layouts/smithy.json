@@ -1,0 +1,15 @@
+{
+ "name": "Smithy",
+ "description": "forge, anvil tables, barrels, crates, front and back door",
+ "scale": 1.5,
+ "rows": [
+  "##########",
+  "#!!.=.0X.#",
+  "#.....0..#",
+  "#==......+",
+  "#......XX#",
+  "#.0......#",
+  "#....=...#",
+  "####+#####"
+ ]
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/schemas/mcpb-manifest-latest.schema.json",
+  "manifest_version": "0.3",
+  "name": "dnd-tabletop",
+  "display_name": "D&D Tabletop",
+  "version": "0.4.0",
+  "description": "A D&D battle map and animated dice that Claude (as your Dungeon Master) draws and rolls inline in the chat.",
+  "long_description": "Claude runs your D&D game and controls a grid battle map and animated dice through four tools: `map`, `show_map`, `roll` and `notes`. The map and dice render as interactive cards right in the conversation. Campaign notes and house rules are plain markdown files on your computer. No accounts, no API keys, no servers, no connectors.\n\nWorks in Claude Desktop (local extensions). Not available in claude.ai in the browser or on mobile.",
+  "author": { "name": "bartooshe" },
+  "repository": { "type": "git", "url": "https://github.com/bartooshe1/dnd-tabletop.git" },
+  "homepage": "https://github.com/bartooshe1/dnd-tabletop",
+  "support": "https://github.com/bartooshe1/dnd-tabletop/issues",
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": ["dnd", "d&d", "tabletop", "rpg", "dungeon master", "battle map", "dice"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "DND_DETAIL": "${user_config.detail}",
+        "DND_UNITS": "${user_config.units}",
+        "DND_DATA_DIR": "${user_config.data_dir}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "map", "description": "Edit the battle map: terrain, tokens, scenes, rooms and generators (silent; show_map displays it)." },
+    { "name": "show_map", "description": "Show the current map card in the chat." },
+    { "name": "roll", "description": "Roll dice with an animated dice card; secret rolls for the DM." },
+    { "name": "notes", "description": "Read and update campaign.md and house_rules.md sections." }
+  ],
+  "user_config": {
+    "detail": {
+      "type": "string",
+      "title": "Tool result detail",
+      "description": "lean (default, fewest tokens) or detailed (more descriptive results, e.g. move distances).",
+      "default": "lean",
+      "required": false
+    },
+    "units": {
+      "type": "string",
+      "title": "Units",
+      "description": "metric (default, meters) or imperial (feet).",
+      "default": "metric",
+      "required": false
+    },
+    "data_dir": {
+      "type": "directory",
+      "title": "Campaign folder (optional)",
+      "description": "Where campaign.md, house_rules.md and the map state live. Leave empty for the default app data folder.",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["win32", "darwin", "linux"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}

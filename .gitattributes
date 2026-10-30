@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+*.mcpb binary
+plugin/dist/** -diff linguist-generated

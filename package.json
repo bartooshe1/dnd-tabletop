@@ -1,0 +1,33 @@
+{
+  "name": "dnd-tabletop",
+  "version": "0.4.0",
+  "description": "D&D battle map and animated dice for Claude Desktop, plus a browser game page for Claude Code.",
+  "author": "bartooshe",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:ui": "node scripts/build.mjs --ui-only",
+    "build:plugin": "node scripts/build.mjs --ui-only && node scripts/build-plugin.mjs",
+    "check:plugin": "node scripts/build.mjs --ui-only && node scripts/build-plugin.mjs --check",
+    "build": "node scripts/build.mjs && node scripts/build-plugin.mjs",
+    "test": "node scripts/build.mjs --ui-only && node --test \"test/**/*.test.mjs\"",
+    "measure": "node scripts/measure-tokens.mjs",
+    "install-extras": "node scripts/install.mjs",
+    "dev:cc": "node scripts/dev-cc.mjs",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "esbuild": "^0.28.2"
+  }
+}

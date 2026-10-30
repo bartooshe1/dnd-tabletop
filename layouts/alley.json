@@ -1,0 +1,13 @@
+{
+ "name": "Alley",
+ "description": "narrow alley between buildings, crates and barrels, side doors",
+ "scale": 1.5,
+ "rows": [
+  "################",
+  "###+######\"#####",
+  "::::X0:::::::0X#",
+  "::::::::;::::::+",
+  "######+#####\"###",
+  "################"
+ ]
+}

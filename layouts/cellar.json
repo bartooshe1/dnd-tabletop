@@ -1,0 +1,15 @@
+{
+ "name": "Cellar",
+ "description": "storage cellar with barrels, crates, stairs up",
+ "scale": 1.5,
+ "rows": [
+  "##########",
+  "#<..000..#",
+  "#.......0#",
+  "#X.X....0#",
+  "#X......;#",
+  "#..00.X..#",
+  "#0...;...#",
+  "##########"
+ ]
+}

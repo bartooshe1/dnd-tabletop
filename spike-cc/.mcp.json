@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dnd": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server.mjs"],
+      "timeout": 3600000
+    }
+  }
+}

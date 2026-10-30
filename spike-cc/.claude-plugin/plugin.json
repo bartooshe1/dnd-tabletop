@@ -1,0 +1,7 @@
+{
+  "name": "dnd-spike",
+  "version": "0.0.1",
+  "description": "Spike: D&D Claude Code mode (blocking turn tool + local page + Stop hook)",
+  "author": { "name": "bartooshe" },
+  "license": "MIT"
+}

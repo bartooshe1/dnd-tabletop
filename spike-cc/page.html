@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&amp;D spike</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101114; color: #e8e3d6; font: 14px/1.4 system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 8px 12px; background: #15171c; border-bottom: 1px solid #2a2e36; display: flex; gap: 10px; align-items: center; }
+  header b { flex: 1; }
+  #chat { flex: 55; overflow: auto; padding: 10px 12px; }
+  .m { margin: 6px 0; white-space: pre-wrap; }
+  .dm { color: #e8e3d6; }
+  .player { color: #93c5fd; text-align: right; }
+  form { display: flex; gap: 6px; padding: 8px 12px; background: #15171c; border-top: 1px solid #2a2e36; }
+  input { flex: 1; font: inherit; color: inherit; background: #0c0d10; border: 1px solid #3a3f4a; border-radius: 7px; padding: 8px; }
+  button { font: inherit; color: inherit; background: #2b3a55; border: 1px solid #3d5278; border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+  #map { flex: 45; min-height: 160px; position: relative; border-top: 1px solid #2a2e36; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #diag { font: 11px ui-monospace, monospace; color: #9a9486; padding: 6px 12px; background: #0c0d10; white-space: pre-wrap; max-height: 9em; overflow: auto; }
+  #status { color: #d4a64a; }
+</style></head>
+<body>
+<header><b>D&amp;D Claude Code spike</b><span id="status">connecting…</span><button id="pause" type="button">Save &amp; pause</button></header>
+<div id="chat"></div>
+<form id="f"><input id="in" autocomplete="off" placeholder="What do you do? (click the map to insert a cell)"><button>Send</button></form>
+<div id="map"><canvas id="c"></canvas></div>
+<div id="diag"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+let token = null, view = null, st = null;
+function addChat(m) {
+  const d = document.createElement("div");
+  d.className = "m " + m.who;
+  d.textContent = (m.who === "dm" ? "DM: " : "You: ") + m.text;
+  $("chat").append(d);
+  $("chat").scrollTop = 1e9;
+}
+function draw() {
+  const c = $("c"), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  if (!view || view.empty) { g.fillStyle = "#9a9486"; g.fillText("Waiting for the Dungeon Master...", 12, 20); return; }
+  const cs = Math.min((w - 24) / view.cols, (h - 18) / view.rows), x0 = 22, y0 = 16;
+  g.font = "10px system-ui"; g.fillStyle = "#8f8a7d"; g.textAlign = "center";
+  for (let col = 0; col < view.cols; col++) g.fillText(col + 1, x0 + col * cs + cs / 2, 11);
+  g.textAlign = "right";
+  for (let r = 0; r < view.rows; r++) g.fillText(r + 1, 18, y0 + r * cs + cs / 2 + 3);
+  view.terrain.forEach((row, r) => row.forEach((i, col) => { if (i < 0) return; g.fillStyle = view.palette[i].color; g.fillRect(x0 + col * cs, y0 + r * cs, cs - 1, cs - 1); }));
+  g.textAlign = "center";
+  for (const t of view.tokens) {
+    const cx = x0 + t.c * cs + cs / 2, cy = y0 + t.r * cs + cs / 2;
+    g.beginPath(); g.arc(cx, cy, cs * 0.4, 0, 7); g.fillStyle = t.color; g.fill();
+    g.lineWidth = 2; g.strokeStyle = t.side === "player" ? "#3b82f6" : "#ef4444"; g.stroke();
+    g.fillStyle = "#fff"; g.fillText(t.glyph || t.type.slice(0, 2), cx, cy + 4);
+  }
+  c.onclick = (e) => {
+    const r = Math.floor((e.offsetY - y0) / cs), col = Math.floor((e.offsetX - x0) / cs);
+    if (r >= 0 && col >= 0 && r < view.rows && col < view.cols) { $("in").value += (($("in").value && !$("in").value.endsWith(" ")) ? " " : "") + `${r + 1}x${col + 1}`; $("in").focus(); }
+  };
+}
+function showState() {
+  if (!st) return;
+  $("status").textContent = st.idleStop ? "DM paused. Run /startdnd in Claude Code" : st.waiting ? "your turn" : "DM is thinking…";
+  const d = st.diag, sec = (ms) => (ms / 1000).toFixed(0) + "s";
+  $("diag").textContent = [
+    `client: ${d.client ? d.client.name + " " + d.client.version : "?"} | CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=${d.autoBackgroundEnv} | wait limit ${sec(d.waitMs)}`,
+    `turn calls: ${d.turns} | waiting for: ${d.waitingSince ? sec(d.now - d.waitingSince) : "-"} | last wait: ${sec(d.lastWaitMs)} | idle count: ${st.idle}`,
+    `stop hook log:`, ...(d.hook.length ? d.hook : ["(no hook runs yet)"]),
+  ].join("\n");
+}
+function connect() {
+  const es = new EventSource("/events");
+  es.addEventListener("snapshot", (e) => { const s = JSON.parse(e.data); token = s.token; $("chat").innerHTML = ""; s.chat.forEach(addChat); view = s.map; st = s.state; draw(); showState(); });
+  es.addEventListener("chat", (e) => addChat(JSON.parse(e.data)));
+  es.addEventListener("map", (e) => { view = JSON.parse(e.data); draw(); });
+  es.addEventListener("state", (e) => { st = JSON.parse(e.data); showState(); });
+  es.onerror = () => { $("status").textContent = "reconnecting…"; };
+}
+const post = (p, body) => fetch(p, { method: "POST", headers: { "content-type": "application/json", "x-dnd-token": token }, body: JSON.stringify(body || {}) });
+$("f").onsubmit = (e) => { e.preventDefault(); const t = $("in").value.trim(); if (!t) return; $("in").value = ""; post("/api/say", { text: t }); };
+$("pause").onclick = () => post("/api/pause");
+addEventListener("resize", draw);
+connect();
+</script>
+</body></html>

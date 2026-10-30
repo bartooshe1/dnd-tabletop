@@ -1,0 +1,9 @@
+node_modules/
+# root build output only: plugin/dist and plugin/build are the shipped plugin and ARE committed
+/build/
+/dist/
+*.mcpb
+*.log
+.DS_Store
+Thumbs.db
+.claude/

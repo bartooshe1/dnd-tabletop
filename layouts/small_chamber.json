@@ -1,0 +1,14 @@
+{
+ "name": "Small chamber",
+ "description": "bare stone room with two doors",
+ "scale": 1.5,
+ "rows": [
+  "###+###",
+  "#.....#",
+  "#.....#",
+  "#.....#",
+  "#.....#",
+  "#.....#",
+  "###+###"
+ ]
+}

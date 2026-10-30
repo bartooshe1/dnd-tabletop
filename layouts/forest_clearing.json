@@ -1,0 +1,19 @@
+{
+ "name": "Forest clearing",
+ "description": "grassy clearing with a path, a pond, a fallen log",
+ "scale": 1.5,
+ "rows": [
+  "TTTTTT::TTTTTT",
+  "TTT**,::,**TTT",
+  "TT*,,,:,,,,*TT",
+  "T*,,,,:,,,,,*T",
+  "T,,,;;:,,~~,,T",
+  "T,,,,,:,,~~,,T",
+  "T*,,,,:,,,,,*T",
+  "T,,,,,::,,,,,T",
+  "TT*,,,,:,,,*TT",
+  "TTT*,,,:,,*TTT",
+  "TTTT*,,:,*TTTT",
+  "TTTTTTT:TTTTTT"
+ ]
+}

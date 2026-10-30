@@ -1,0 +1,11 @@
+{
+  "name": "dnd-tabletop",
+  "displayName": "D&D Tabletop",
+  "version": "0.4.0",
+  "description": "Play D&D in a local browser page with Claude Code as your Dungeon Master: chat, animated dice and a live battle map. /startdnd and /continuednd.",
+  "author": { "name": "bartooshe" },
+  "homepage": "https://github.com/bartooshe1/dnd-tabletop",
+  "repository": "https://github.com/bartooshe1/dnd-tabletop",
+  "license": "MIT",
+  "keywords": ["dnd", "d&d", "tabletop", "rpg", "dungeon master", "battle map", "dice"]
+}

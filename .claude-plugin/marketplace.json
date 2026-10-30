@@ -1,0 +1,12 @@
+{
+  "name": "dnd-tabletop",
+  "description": "D&D Tabletop: play D&D with Claude Code as your Dungeon Master in a local browser page.",
+  "owner": { "name": "bartooshe" },
+  "plugins": [
+    {
+      "name": "dnd-tabletop",
+      "source": "./plugin",
+      "description": "Chat, animated dice and a live battle map in a local browser page. Commands: /startdnd, /continuednd."
+    }
+  ]
+}

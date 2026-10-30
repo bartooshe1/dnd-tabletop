@@ -1,0 +1,5 @@
+html, body { margin: 0; background: transparent; color: #e7e2d6; font: 13px system-ui, sans-serif; }
+.card { background: #16181d; border: 1px solid #2f333b; border-radius: 10px; padding: 12px; display: inline-flex; flex-direction: column; gap: 8px; }
+.title { font-weight: 600; letter-spacing: .02em; }
+.diag { color: #a8a294; font-size: 11px; max-width: 420px; }
+button { background: #2b3a55; color: #e7e2d6; border: 1px solid #3d5278; border-radius: 6px; padding: 6px 10px; cursor: pointer; }

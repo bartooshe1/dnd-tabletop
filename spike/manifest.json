@@ -1,0 +1,22 @@
+{
+  "manifest_version": "0.3",
+  "name": "dnd-tabletop-spike",
+  "display_name": "D&D Tabletop (spike)",
+  "version": "0.0.1",
+  "description": "Spike: renders a hardcoded 5x5 D&D map card inline to verify MCP Apps from an .mcpb.",
+  "author": { "name": "bartooshe" },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "server/server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/server.js"]
+    }
+  },
+  "tools": [{ "name": "show_spike", "description": "Render a test 5x5 D&D map card inline." }],
+  "compatibility": {
+    "platforms": ["win32", "darwin", "linux"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}
