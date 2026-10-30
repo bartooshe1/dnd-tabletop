@@ -11,12 +11,12 @@ import { loadCcConfig } from "../cc/config.js";
 
 const dataDir = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), "dnd-dev-cc-"));
 const config = loadCcConfig({ ...process.env, DND_DATA_DIR: dataDir, DND_NO_BROWSER: "1", DND_PORT: process.env.DND_PORT || "47800", DND_WAIT_MS: "600000", DND_LAN_BIND: process.env.DND_LAN_BIND || "127.0.0.1" });
-const { server, page, ready } = createCcServer(config, { browser: () => {} });
+const { server, page, startPage } = createCcServer(config, { browser: () => {} });
 const [a, b] = InMemoryTransport.createLinkedPair();
 await server.connect(a);
 const dm = new Client({ name: "stand-in-dm", version: "0" });
 await dm.connect(b);
-await ready;
+await startPage();
 const call = async (name, args) => (await dm.callTool({ name, arguments: args }, undefined, { timeout: 3_600_000 })).content.map((c) => c.text).join("\n");
 process.stdout.write(`dev page: http://localhost:${page.port}/  (data: ${dataDir})\n`);
 

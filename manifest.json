@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "dnd-tabletop",
   "display_name": "D&D Tabletop",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "A D&D battle map and animated dice that Claude (as your Dungeon Master) draws and rolls inline in the chat.",
   "long_description": "Claude runs your D&D game and controls a grid battle map and animated dice through four tools: `map`, `show_map`, `roll` and `notes`. The map and dice render as interactive cards right in the conversation. Campaign notes and house rules are plain markdown files on your computer. No accounts, no API keys, no servers, no connectors.\n\nWorks in Claude Desktop (local extensions). Not available in claude.ai in the browser or on mobile.",
   "author": { "name": "bartooshe" },

@@ -17,7 +17,7 @@ import { PageServer } from "./http.js";
 import { openBrowser } from "./browser.js";
 import { INSTRUCTIONS, MAP_DESC, NOTES_DESC, ROLL_DESC, TURN_DESC } from "./descriptions.js";
 
-export const VERSION = "0.4.4";
+export const VERSION = "0.4.5";
 const text = (t, extra = {}) => ({ content: [{ type: "text", text: t }], ...extra });
 
 function pageHtml() {
@@ -31,12 +31,19 @@ export function createCcServer(config, { random = Math.random, browser = openBro
   const table = new Table(config, { mode: "cc", random });
   const game = new Game(table, config);
   const page = new PageServer(game, config, { page: pageHtml(), log });
-  const ready = page.start();
+  // The page server starts with the first game call, not with Claude Code: the plugin is loaded in
+  // every Claude Code session, and idle sessions must not hold the game's port (or its link).
+  let ready = null;
+  const startPage = () =>
+    (ready ??= page.start().catch((e) => {
+      ready = null;
+      throw e;
+    }));
   let opened = false;
 
   /** Open the page once per session, and only if no page is connected yet. */
   const showPage = async () => {
-    await ready;
+    await startPage();
     if (!config.openBrowser || page.clients.size || opened) return;
     opened = true;
     try {
@@ -65,7 +72,7 @@ export function createCcServer(config, { random = Math.random, browser = openBro
       inputSchema: { say: z.string().optional(), map: z.string().optional(), wait: z.boolean().optional() },
     },
     guard(async (args, extra) => {
-      await ready;
+      await startPage();
       if (!page.clients.size) showPage();
       const token = extra?._meta?.progressToken;
       const progress =
@@ -162,5 +169,5 @@ export function createCcServer(config, { random = Math.random, browser = openBro
     }),
   );
 
-  return { server, table, game, page, ready };
+  return { server, table, game, page, startPage };
 }
