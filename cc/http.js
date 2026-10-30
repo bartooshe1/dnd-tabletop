@@ -18,12 +18,29 @@ const SECURITY_HEADERS = {
 const PAGE_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+/** Running inside WSL (Windows Subsystem for Linux)? */
+export const inWsl = (release = os.release()) => /microsoft/i.test(release);
+
+/**
+ * What kind of address this is, for the phone: "lan" (home Wi-Fi), "tailscale" (100.64.0.0/10,
+ * works from anywhere with the Tailscale app) or "private" (172.16.0.0/12: WSL, Docker, VMs;
+ * usually reachable from this computer only).
+ */
+export function addressKind(ip) {
+  const [a, b] = ip.split(".").map(Number);
+  if (a === 100 && b >= 64 && b < 128) return "tailscale";
+  if (a === 172 && b >= 16 && b < 32) return "private";
+  return "lan";
+}
+const RANK = { lan: 0, tailscale: 1, private: 2 };
+
+/** This computer's IPv4 addresses, the ones a phone can most likely reach first. */
 export function lanAddresses() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) {
     for (const a of list ?? []) if (a.family === "IPv4" && !a.internal) out.push(a.address);
   }
-  return out;
+  return out.sort((x, y) => RANK[addressKind(x)] - RANK[addressKind(y)]);
 }
 
 const isLoopback = (a) => typeof a === "string" && (a === "::1" || a.startsWith("127.") || a.startsWith("::ffff:127."));
@@ -70,7 +87,11 @@ export class PageServer {
 
   settingsPayload(settings = this.game.settings) {
     const urls = this.lanUrls();
-    return { ...settings, lanUrls: urls, lanName: this.nameUrl(), lanQr: urls[0] ? qrSvg(urls[0], { scale: 4 }) : null };
+    const ips = this.lan ? lanAddresses() : [];
+    const lanKinds = ips.map(addressKind);
+    // in WSL without mirrored networking the only "LAN" address is WSL's own, which phones can't reach
+    const wslOnly = inWsl() && !lanKinds.includes("lan");
+    return { ...settings, lanUrls: urls, lanKinds, lanWsl: wslOnly, lanName: wslOnly ? null : this.nameUrl(), lanQr: urls[0] ? qrSvg(urls[0], { scale: 4 }) : null };
   }
 
   /** A new secret link: every open page and phone is disconnected and needs the new one. */

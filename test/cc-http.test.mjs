@@ -226,3 +226,13 @@ test("on the game computer an old or broken link still works (the page learns th
   // a LAN-style Host on a loopback socket is not trusted
   for (const ip of lanAddresses().slice(0, 1)) assert.equal(await raw(page.port, { path: "/events", headers: { host: `${ip}:${page.port}` } }), 403);
 });
+
+test("phone links: home Wi-Fi first, then Tailscale, then private VM/WSL addresses; WSL is detected", async () => {
+  const { addressKind, inWsl } = await import("../cc/http.js");
+  assert.deepEqual(["192.168.1.147", "10.0.0.5", "100.102.42.86", "172.29.199.193", "172.32.0.1"].map(addressKind), ["lan", "lan", "tailscale", "private", "lan"]);
+  assert.equal(inWsl("6.18.54.1-microsoft-standard-WSL2"), true);
+  assert.equal(inWsl("6.8.0-45-generic"), false);
+  const ips = lanAddresses();
+  const rank = { lan: 0, tailscale: 1, private: 2 };
+  for (let i = 1; i < ips.length; i++) assert.ok(rank[addressKind(ips[i - 1])] <= rank[addressKind(ips[i])], `sorted: ${ips.join(", ")}`);
+});

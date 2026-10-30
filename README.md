@@ -65,6 +65,11 @@ What the game page has:
 
 **Several campaigns:** `/startdnd` saves the current campaign before starting a new one. To go back to one, type `/continuednd` with its name, for example `/continuednd The Sunken Crown`; the one you were playing is saved first. Settings → Campaigns lists them.
 
+**Playing in WSL (Ubuntu on Windows)?** WSL has its own private network, so a phone on your Wi-Fi can't reach the game there. Either:
+- use **Tailscale** (install it in WSL and on your phone, same account): the page puts the Tailscale link in the QR code, and it works from anywhere; or
+- turn on WSL's **mirrored networking**: create `%USERPROFILE%\.wslconfig` with the two lines `[wsl2]` and `networkingMode=mirrored`, run `wsl --shutdown`, start WSL again, and allow the port through the firewall when asked; or
+- run Claude Code on Windows itself.
+
 **Spoiler warning:** the terminal shows Claude's tool calls, including DM notes and hidden rolls. Keep your eyes on the game page.
 
 Troubleshooting:

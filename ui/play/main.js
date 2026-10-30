@@ -734,7 +734,19 @@ function renderSettings() {
   if (s.lan) {
     lan.push(h("p", { class: "warn-text" }, "Anyone on your network who has this link can play, and the connection is not encrypted. Use it on a home network only. Away from home, connect your phone with Tailscale instead."));
     lan.push(h("p", { class: "muted" }, "This link stays the same every time you play, so bookmark it on your phone (or add it to the home screen)."));
-    for (const u of s.lanUrls ?? []) lan.push(h("div", { class: "lan-url" }, h("code", {}, u)));
+    if (s.lanWsl) {
+      lan.push(
+        h(
+          "p",
+          { class: "warn-text" },
+          s.lanKinds?.includes("tailscale")
+            ? "The game runs in WSL, so phones on your Wi-Fi can't reach it directly. The QR code uses your Tailscale address instead: open the Tailscale app on your phone (same account) and it works from anywhere."
+            : "The game runs in WSL, so phones on your Wi-Fi can't reach it. Turn on WSL's mirrored networking (see the README), install Tailscale on this computer and your phone, or play from Claude Code on Windows instead.",
+        ),
+      );
+    }
+    const KIND = { tailscale: "Tailscale: phone needs the Tailscale app", private: "this computer only" };
+    (s.lanUrls ?? []).forEach((u, i) => lan.push(h("div", { class: "lan-url" }, h("code", {}, u), KIND[s.lanKinds?.[i]] ? h("span", { class: "muted" }, ` (${KIND[s.lanKinds[i]]})`) : null)));
     if (s.lanQr) lan.push(h("img", { class: "qr", alt: "QR code for the LAN link", src: `data:image/svg+xml;base64,${btoa(s.lanQr)}` }));
     if (!(s.lanUrls ?? []).length) lan.push(h("p", { class: "muted" }, "No network address found. Is this computer on Wi-Fi?"));
     if (s.lanName) {

@@ -1,6 +1,6 @@
 {
   "name": "dnd-tabletop",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "D&D battle map and animated dice for Claude Desktop, plus a browser game page for Claude Code.",
   "author": "bartooshe",
   "type": "module",
