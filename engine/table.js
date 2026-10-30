@@ -123,7 +123,7 @@ export class Table {
    */
   archiveAndReset(extraReset = []) {
     const dir = this.config.dataDir;
-    const skip = new Set(["archive", "campaigns", "storybooks", "campaign.lock", "session.json"]);
+    const skip = new Set(["archive", "campaigns", "storybooks", "campaign.lock", "session.json", "page-token"]);
     let dest = path.join(dir, "archive", stamp(new Date(this.now())));
     for (let n = 2; fs.existsSync(dest); n++) dest = path.join(dir, "archive", `${stamp(new Date(this.now()))}-${n}`);
     fs.mkdirSync(dest, { recursive: true });

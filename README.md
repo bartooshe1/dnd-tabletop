@@ -61,7 +61,7 @@ What the game page has:
   - **Tell me when it's my turn:** a notification when the tab is in the background.
   - **Storybook:** your whole adventure as one book-style HTML file to read, print or share.
   - **Campaigns:** your other saved adventures.
-  - **Play from a phone:** a LAN mode with a QR code.
+  - **Play from a phone:** a LAN mode with a QR code. The link stays the same between sessions, so you can bookmark it; "Make a new link" changes it if someone else got it.
 
 **Several campaigns:** `/startdnd` saves the current campaign before starting a new one. To go back to one, type `/continuednd` with its name, for example `/continuednd The Sunken Crown`; the one you were playing is saved first. Settings → Campaigns lists them.
 

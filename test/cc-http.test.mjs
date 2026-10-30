@@ -2,6 +2,8 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import { tmpDir } from "./helpers.mjs";
 import { Table } from "../engine/table.js";
 import { Game } from "../cc/game.js";
@@ -170,4 +172,24 @@ test("two game servers never share a port, even when one is in LAN mode (Windows
   assert.notEqual(b.port, a.page.port, "the second server moved to another port");
   assert.equal(await (await fetch(`http://127.0.0.1:${b.port}/__instance`)).text(), b.instance);
   assert.equal(await (await fetch(`http://127.0.0.1:${a.page.port}/__instance`)).text(), a.page.instance);
+});
+
+test("the page link stays the same between sessions; 'Make a new link' replaces it and cuts off old pages", async () => {
+  const { game, page, origin } = await setup({ lan: true });
+  const first = page.token;
+  assert.equal(fs.readFileSync(path.join(game.config.dataDir, "page-token"), "utf8"), first);
+  // a later session (new server, same data folder) gets the same link
+  const again = new PageServer(game, { ...game.config, port: page.port + 1, lan: true, lanBind: "127.0.0.1" }, { page: "<!DOCTYPE html><title>b</title>" });
+  assert.equal(again.token, first);
+  const sse = await connectSse(`${origin}/events?t=${first}`);
+  await sse.next("snapshot");
+  const r = await post(origin, `/api/link/new?t=${first}`, {}, { token: first });
+  const { token, settings } = await r.json();
+  assert.notEqual(token, first);
+  assert.ok(settings.lanUrls.every((u) => u.endsWith(`?t=${token}`)));
+  assert.equal(page.clients.size, 0, "open pages and phones are disconnected");
+  assert.equal((await fetch(`${origin}/events?t=${first}`)).status, 403, "the old link no longer works");
+  assert.equal((await fetch(`${origin}/events?t=${token}`)).status, 200);
+  assert.equal(fs.readFileSync(path.join(game.config.dataDir, "page-token"), "utf8"), token, "the new link is kept for next time");
+  sse.close();
 });

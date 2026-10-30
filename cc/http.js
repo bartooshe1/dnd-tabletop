@@ -1,7 +1,7 @@
 // The local web page server for Claude Code mode. Binds 127.0.0.1 (LAN mode: 0.0.0.0).
 // Server -> page: Server-Sent Events, full snapshot on every (re)connect.
-// Page -> server: JSON POSTs that must carry the per-session token and a matching Origin.
-// Never reads or writes files: the page HTML arrives as a string.
+// Page -> server: JSON POSTs that must carry the link's token and a matching Origin.
+// Never reads or writes files: the page HTML arrives as a string, the token comes from the game.
 import http from "node:http";
 import os from "node:os";
 import crypto from "node:crypto";
@@ -26,6 +26,12 @@ export function lanAddresses() {
   return out;
 }
 
+/** This computer's mDNS name ("bar-pc.local"), if it is a plain host name. */
+export function localName() {
+  const n = os.hostname().toLowerCase().replace(/\.local$/, "");
+  return /^[a-z0-9][a-z0-9-]{0,62}$/.test(n) ? `${n}.local` : null;
+}
+
 const same = (a, b) => typeof a === "string" && typeof b === "string" && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 export class PageServer {
@@ -34,7 +40,7 @@ export class PageServer {
     this.config = config;
     this.page = page;
     this.log = log;
-    this.token = crypto.randomBytes(24).toString("base64url");
+    this.token = game.pageToken?.() ?? crypto.randomBytes(24).toString("base64url");
     this.instance = crypto.randomBytes(8).toString("hex"); // not secret: tells two game servers apart
     this.clients = new Set();
     this.port = 0;
@@ -53,9 +59,24 @@ export class PageServer {
     return this.lan ? lanAddresses().map((ip) => `http://${ip}:${this.port}/?t=${this.token}`) : [];
   }
 
+  /** http://<computer-name>.local:port/?t=…: stays the same even when the router hands out a new IP. */
+  nameUrl() {
+    const name = localName();
+    return this.lan && name ? `http://${name}:${this.port}/?t=${this.token}` : null;
+  }
+
   settingsPayload(settings = this.game.settings) {
     const urls = this.lanUrls();
-    return { ...settings, lanUrls: urls, lanQr: urls[0] ? qrSvg(urls[0], { scale: 4 }) : null };
+    return { ...settings, lanUrls: urls, lanName: this.nameUrl(), lanQr: urls[0] ? qrSvg(urls[0], { scale: 4 }) : null };
+  }
+
+  /** A new secret link: every open page and phone is disconnected and needs the new one. */
+  rotateToken() {
+    this.token = this.game.newPageToken?.() ?? crypto.randomBytes(24).toString("base64url");
+    for (const res of this.clients) res.end();
+    this.clients.clear();
+    this.log(`new page link: ${this.localUrl}`);
+    return this.token;
   }
 
   snapshot() {
@@ -144,7 +165,8 @@ export class PageServer {
     const port = this.server?.address()?.port ?? this.port;
     const local = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
     if (local.includes(host.toLowerCase())) return true;
-    return this.lan && lanAddresses().some((ip) => host === `${ip}:${port}`);
+    const name = localName();
+    return this.lan && (lanAddresses().some((ip) => host === `${ip}:${port}`) || (!!name && host.toLowerCase() === `${name}:${port}`));
   }
 
   async #handle(req, res) {
@@ -207,6 +229,10 @@ export class PageServer {
       case "/api/storybook": {
         const book = this.game.storybook();
         return ok({ name: book.name, file: book.file, html: book.html });
+      }
+      case "/api/link/new": {
+        const token = this.rotateToken();
+        return ok({ token, settings: this.settingsPayload() });
       }
       case "/api/pause":
         this.game.requestPause();

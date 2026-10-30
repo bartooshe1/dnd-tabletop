@@ -170,7 +170,9 @@ function showBanner(text, kind = "info") {
 }
 
 function connect() {
+  S.es?.close();
   const es = new EventSource(S.token ? `/events?t=${encodeURIComponent(S.token)}` : "/events");
+  S.es = es;
   es.addEventListener("snapshot", (e) => applySnapshot(JSON.parse(e.data)));
   es.addEventListener("chat", (e) => addMessage(JSON.parse(e.data), { live: true }));
   es.addEventListener("map", (e) => setMap(JSON.parse(e.data)));
@@ -631,6 +633,19 @@ async function downloadStorybook(btn, note) {
   note.textContent = `Saved. A copy is also in ${r.file}`;
 }
 
+// ---------- a new secret link ----------
+async function newLink() {
+  if (!confirm("Make a new link? The old link (and phone bookmarks) stop working.")) return;
+  const r = await api("/api/link/new");
+  if (!r?.token) return;
+  S.token = r.token;
+  const url = new URL(location.href);
+  url.searchParams.set("t", r.token);
+  history.replaceState(null, "", url);
+  setSettings(r.settings);
+  connect();
+}
+
 // ---------- settings ----------
 function setSettings(s) {
   S.settings = { ...S.settings, ...s };
@@ -678,9 +693,19 @@ function renderSettings() {
   const lan = [toggle("lan", "Play from a phone (LAN)", "Lets devices on your Wi-Fi open the game.")];
   if (s.lan) {
     lan.push(h("p", { class: "warn-text" }, "Anyone on your network who has this link can play, and the connection is not encrypted. Use it on a home network only. Away from home, connect your phone with Tailscale instead."));
+    lan.push(h("p", { class: "muted" }, "This link stays the same every time you play, so bookmark it on your phone (or add it to the home screen)."));
     for (const u of s.lanUrls ?? []) lan.push(h("div", { class: "lan-url" }, h("code", {}, u)));
     if (s.lanQr) lan.push(h("img", { class: "qr", alt: "QR code for the LAN link", src: `data:image/svg+xml;base64,${btoa(s.lanQr)}` }));
     if (!(s.lanUrls ?? []).length) lan.push(h("p", { class: "muted" }, "No network address found. Is this computer on Wi-Fi?"));
+    if (s.lanName) {
+      lan.push(
+        h("p", { class: "muted" }, "If your router gives this computer a new address, this name link keeps working on most iPhones, Macs and newer Androids:"),
+        h("div", { class: "lan-url" }, h("code", {}, s.lanName)),
+      );
+    }
+    lan.push(
+      h("div", { class: "row" }, h("button", { class: "btn small", type: "button", onclick: () => newLink() }, "Make a new link"), h("span", { class: "muted" }, "Only if someone else got your link: every phone then needs the new one.")),
+    );
   }
   const pct = h("span", { class: "size-pct" }, `${Math.round(S.textSize * 100)}%`);
   const size = h(

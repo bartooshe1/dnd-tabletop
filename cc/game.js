@@ -2,6 +2,7 @@
 // `turn` publishes narration and map edits to the page, then blocks until the player sends a
 // message (or the wait times out). Emits "chat", "map", "roll", "state", "settings", "player".
 import { EventEmitter } from "node:events";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { activeMap } from "../engine/model.js";
@@ -54,6 +55,35 @@ export class Game extends EventEmitter {
     this.seq = this.chat.at(-1)?.id ?? 0;
     this.sceneKey = this.#sceneKey();
     writeFlag(dir, { active: false, paused: false, idleStop: false, pid: process.pid, lastTurnAt: 0, lastBlockAt: 0, ownerSession: null });
+  }
+
+  // ---------- the page link ----------
+
+  /**
+   * The secret in the page link (?t=). It is kept in page-token so the link (and a phone
+   * bookmark) stays the same between sessions, until the player asks for a new one.
+   */
+  pageToken() {
+    try {
+      const t = fs.readFileSync(path.join(this.config.dataDir, "page-token"), "utf8").trim();
+      if (/^[\w-]{32,}$/.test(t)) return t;
+    } catch {
+      /* first run */
+    }
+    return this.newPageToken();
+  }
+
+  newPageToken() {
+    const t = crypto.randomBytes(24).toString("base64url");
+    const file = path.join(this.config.dataDir, "page-token");
+    try {
+      fs.mkdirSync(this.config.dataDir, { recursive: true });
+      writeFileAtomic(file, t);
+      fs.chmodSync(file, 0o600);
+    } catch {
+      /* the link still works for this session */
+    }
+    return t;
   }
 
   // ---------- what the page sees ----------
