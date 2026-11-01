@@ -17,7 +17,7 @@ import { PageServer } from "./http.js";
 import { openBrowser } from "./browser.js";
 import { INSTRUCTIONS, MAP_DESC, NOTES_DESC, ROLL_DESC, TURN_DESC } from "./descriptions.js";
 
-export const VERSION = "0.4.6";
+export const VERSION = "0.5.0";
 const text = (t, extra = {}) => ({ content: [{ type: "text", text: t }], ...extra });
 
 function pageHtml() {
@@ -80,7 +80,13 @@ export function createCcServer(config, { random = Math.random, browser = openBro
           ? undefined
           : (ms) => extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: ms, message: "waiting for the player" } }).catch(() => {});
       const r = await game.turn(args, { progress, signal: extra?.signal });
-      return text(r.text, r.isError ? { isError: true } : {});
+      const out = text(r.text, r.isError ? { isError: true } : {});
+      // pictures the player added come back as images, so Claude sees them
+      for (const id of r.images ?? []) {
+        const img = game.images.read(id);
+        if (img) out.content.push({ type: "image", data: img.buf.toString("base64"), mimeType: img.type });
+      }
+      return out;
     }),
   );
 

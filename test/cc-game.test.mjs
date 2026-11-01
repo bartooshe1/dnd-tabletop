@@ -28,7 +28,7 @@ test("turn blocks until the player sends a message, then returns just that text"
   assert.equal(game.chat.at(-1).text, "You stand at the gate. What do you do?");
   game.playerMessage("I knock on the gate");
   const r = await p;
-  assert.deepEqual(r, { text: "I knock on the gate" });
+  assert.deepEqual(r, { text: "I knock on the gate", images: [] });
   assert.equal(game.state().waiting, false);
 });
 
@@ -305,4 +305,56 @@ test("storybook: transcripts as chapters plus journal notes; never DM Secrets; s
   assert.doesNotMatch(book.html, /different story|<script>/, "other campaigns' transcripts stay out");
   assert.doesNotMatch(book.html, /5\/13|13 HP/);
   assert.ok(fs.existsSync(book.file) && path.dirname(book.file) === path.join(dataDir, "storybooks"));
+});
+
+// smallest valid PNG (1x1) and a JPEG header, as the page would send them (base64)
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+test("pictures: checked by their bytes, at most 3 per message, and they reach the DM with the message", async () => {
+  const { game, dataDir } = setup();
+  game.newCampaign("Pics");
+  assert.throws(() => game.addImage(Buffer.from("<svg onload=alert(1)>").toString("base64")), /isn't a JPEG, PNG, GIF or WebP/);
+  assert.throws(() => game.addImage(""), /empty/);
+  const a = game.addImage(`data:image/png;base64,${PNG}`);
+  game.addImage(PNG);
+  const c = game.addImage(PNG);
+  assert.throws(() => game.addImage(PNG), /up to 3 pictures/);
+  game.removePendingImage(c);
+  assert.equal(game.pendingImagesView().length, 2);
+  assert.ok(fs.existsSync(path.join(dataDir, "images", `${a}.png`)));
+  const p = game.turn({ say: "What is it?" });
+  await tick();
+  game.playerMessage("This is my sword");
+  const r = await p;
+  assert.equal(r.text, "This is my sword [2 pictures attached]");
+  assert.equal(r.images.length, 2);
+  assert.deepEqual(game.chat.at(-1).images, r.images);
+  assert.equal(game.pendingImagesView().length, 0, "sent pictures leave the queue");
+  // a picture alone is a message too
+  game.addImage(PNG);
+  assert.equal(game.playerMessage(""), true);
+});
+
+test("portrait and map pictures: shown on the sheet, token and map; the DM sees them with the next message", async () => {
+  const { game, table } = setup();
+  game.newCampaign("Faces");
+  assert.throws(() => game.addImage(PNG, "map"), /no map yet/);
+  table.map('new "Hall" 6x6, 2x2-player, tok player1 name=Aria');
+  const face = game.addImage(PNG, "portrait");
+  const bg = game.addImage(PNG, "map");
+  assert.equal(game.player().portrait, face);
+  const v = game.mapView();
+  assert.equal(v.bg, bg);
+  assert.equal(v.tokens.find((t) => t.side === "player").portrait, face);
+  const p = game.turn({ say: "Go on." });
+  await tick();
+  game.playerMessage("Here's Aria and the hall");
+  const r = await p;
+  assert.match(r.text, /\[I set this picture as my character portrait\] \[I put this picture on the map 'Hall' as its background\]/);
+  assert.deepEqual(r.images, [face, bg]);
+  game.clearImage("map");
+  assert.equal(game.mapView().bg, undefined);
+  assert.equal(game.player().portrait, face, "the portrait stays");
+  // the storybook embeds the portrait
+  assert.match(game.storybook().html, /class="portrait" src="data:image\/png;base64,/);
 });

@@ -6,9 +6,11 @@ import http from "node:http";
 import os from "node:os";
 import crypto from "node:crypto";
 import { qrSvg } from "./qr.js";
+import { ImageError } from "./images.js";
 
 const MAX_BODY = 16 * 1024;
-const EVENTS = ["chat", "map", "roll", "state", "settings", "player", "pending", "sheet"];
+const MAX_IMAGE_BODY = 9 * 1024 * 1024; // a 6 MB picture as base64 JSON
+const EVENTS = ["chat", "map", "roll", "state", "settings", "player", "pending", "sheet", "images"];
 const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
@@ -16,7 +18,7 @@ const SECURITY_HEADERS = {
   "x-frame-options": "DENY",
 };
 const PAGE_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 /** Running inside WSL (Windows Subsystem for Linux)? */
 export const inWsl = (release = os.release()) => /microsoft/i.test(release);
@@ -104,7 +106,7 @@ export class PageServer {
   }
 
   snapshot() {
-    return { ...this.game.snapshot(), settings: this.settingsPayload(), token: this.token, pending: [...this.game.pendingRolls] };
+    return { ...this.game.snapshot(), settings: this.settingsPayload(), token: this.token, pending: [...this.game.pendingRolls], images: this.game.pendingImagesView() };
   }
 
   /** Start listening on the configured port, or the next free one (up to +20). */
@@ -239,6 +241,13 @@ export class PageServer {
       return;
     }
     if (req.method === "GET" && url.pathname === "/favicon.ico") return res.writeHead(204, SECURITY_HEADERS).end();
+    const pic = req.method === "GET" && /^\/img\/([a-f0-9]{16})$/.exec(url.pathname);
+    if (pic) {
+      const img = this.game.images.read(pic[1]);
+      if (!img) return res.writeHead(404, SECURITY_HEADERS).end();
+      // ids are random and never reused, so the browser may keep the picture
+      return res.writeHead(200, { ...SECURITY_HEADERS, "content-type": img.type, "cache-control": "private, max-age=31536000, immutable" }).end(img.buf);
+    }
     if (req.method !== "POST" || !url.pathname.startsWith("/api/")) return res.writeHead(404, SECURITY_HEADERS).end();
 
     // Writes: token header + Origin that matches this exact host (blocks other sites' forms/fetches).
@@ -247,9 +256,10 @@ export class PageServer {
     if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return res.writeHead(415, SECURITY_HEADERS).end();
     let size = 0;
     const chunks = [];
+    const limit = url.pathname === "/api/image" ? MAX_IMAGE_BODY : MAX_BODY;
     for await (const c of req) {
       size += c.length;
-      if (size > MAX_BODY) return res.writeHead(413, SECURITY_HEADERS).end();
+      if (size > limit) return res.writeHead(413, SECURITY_HEADERS).end("too big");
       chunks.push(c);
     }
     let body;
@@ -260,6 +270,18 @@ export class PageServer {
     }
     const ok = (data) => res.writeHead(200, { ...SECURITY_HEADERS, "content-type": "application/json" }).end(JSON.stringify(data ?? { ok: true }));
     switch (url.pathname) {
+      case "/api/image":
+      case "/api/image/remove":
+      case "/api/image/clear":
+        try {
+          if (url.pathname === "/api/image") return ok({ id: this.game.addImage(body.data, body.kind ?? "chat") });
+          if (url.pathname === "/api/image/remove") this.game.removePendingImage(String(body.id ?? ""));
+          else this.game.clearImage(body.kind);
+          return ok();
+        } catch (e) {
+          if (e instanceof ImageError) return res.writeHead(400, { ...SECURITY_HEADERS, "content-type": "text/plain; charset=utf-8" }).end(e.message);
+          throw e;
+        }
       case "/api/say":
         return this.game.playerMessage(body.text) ? ok() : res.writeHead(400, SECURITY_HEADERS).end("empty");
       case "/api/roll": {

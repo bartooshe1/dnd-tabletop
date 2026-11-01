@@ -43,6 +43,19 @@ export function mountMap({ stage, onCell = () => {}, sizing = "content", maxHeig
     }).observe(canvas);
   }
   const fxOn = () => S.animated && S.visible && !document.hidden && !reducedMotion();
+  // pictures (a map background, the player's portrait) by URL: loaded once, redraw when ready
+  const pics = new Map();
+  const pic = (url) => {
+    if (!url) return null;
+    let i = pics.get(url);
+    if (!i) {
+      i = new Image();
+      i.onload = () => draw();
+      i.src = url;
+      pics.set(url, i);
+    }
+    return i.complete && i.naturalWidth ? i : null;
+  };
   document.addEventListener("visibilitychange", () => !document.hidden && draw());
 
   const tokenAt = (r, c) => S.view?.tokens?.find((t) => t.r === r && t.c === c) ?? null;
@@ -159,8 +172,36 @@ export function mountMap({ stage, onCell = () => {}, sizing = "content", maxHeig
     const styles = v.palette.map((p) => styleOf(p.id));
     const solid = v.palette.map((p, i) => styles[i] === "brick" || (p.blocking && !p.glyph));
     let fx = false;
+    const bg = pic(v.bgUrl);
+    if (bg) {
+      // the player's own map picture, stretched over the grid; terrain only shows as a faint tint
+      // on blocking squares (the tooltip still names every square) and the grid stays on top
+      ctx.drawImage(bg, x0, y0, v.cols * cs, v.rows * cs);
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) {
+          const idx = v.terrain[r][c];
+          if (idx < 0 || !v.palette[idx].blocking || v.palette[idx].glyph) continue;
+          ctx.fillStyle = "rgba(0,0,0,0.22)";
+          ctx.fillRect(x0 + c * cs, y0 + r * cs, cs, cs);
+        }
+      }
+      if (cs >= 8) {
+        ctx.strokeStyle = "rgba(0,0,0,0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let c = c0; c <= c1 + 1; c++) {
+          ctx.moveTo(Math.round(x0 + c * cs) + 0.5, y0 + r0 * cs);
+          ctx.lineTo(Math.round(x0 + c * cs) + 0.5, y0 + (r1 + 1) * cs);
+        }
+        for (let r = r0; r <= r1 + 1; r++) {
+          ctx.moveTo(x0 + c0 * cs, Math.round(y0 + r * cs) + 0.5);
+          ctx.lineTo(x0 + (c1 + 1) * cs, Math.round(y0 + r * cs) + 0.5);
+        }
+        ctx.stroke();
+      }
+    }
     // 1: terrain tiles
-    for (let r = r0; r <= r1; r++) {
+    for (let r = r0; r <= r1 && !bg; r++) {
       for (let c = c0; c <= c1; c++) {
         const idx = v.terrain[r][c];
         if (idx < 0) continue;
@@ -175,7 +216,7 @@ export function mountMap({ stage, onCell = () => {}, sizing = "content", maxHeig
       }
     }
     // 2: shadows cast by walls onto the cells below and right of them, and moving water
-    if (textured) {
+    if (textured && !bg) {
       const at = (r, c) => (r >= 0 && c >= 0 && r < v.rows && c < v.cols ? v.terrain[r][c] : -1);
       for (let r = r0; r <= r1; r++) {
         for (let c = c0; c <= c1; c++) {
@@ -328,12 +369,27 @@ export function mountMap({ stage, onCell = () => {}, sizing = "content", maxHeig
     ctx.fillStyle = t.color || "#666";
     ctx.fill();
     ctx.shadowBlur = 0;
+    const face = pic(t.portraitUrl);
+    if (face) {
+      // the player's portrait, cropped to a circle from the middle of the picture
+      const side = Math.min(face.naturalWidth, face.naturalHeight);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(face, (face.naturalWidth - side) / 2, (face.naturalHeight - side) / 2, side, side, cx - rad, cy - rad, rad * 2, rad * 2);
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    }
     ctx.lineWidth = Math.max(1.5, cs * 0.075);
     ctx.strokeStyle = SIDE[t.side] ?? SIDE.hostile;
     ctx.stroke();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    if (t.glyph) {
+    if (face) {
+      /* the picture is the face */
+    } else if (t.glyph) {
       ctx.font = `${Math.floor(cs * 0.5)}px ${EMOJI}`;
       ctx.fillText(t.glyph, cx, cy + cs * 0.03);
     } else {

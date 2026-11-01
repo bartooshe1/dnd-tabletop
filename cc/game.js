@@ -1,6 +1,7 @@
 // Claude Code mode game loop, independent of MCP and HTTP so it can be tested directly.
 // `turn` publishes narration and map edits to the page, then blocks until the player sends a
-// message (or the wait times out). Emits "chat", "map", "roll", "state", "settings", "player".
+// message (or the wait times out). Emits "chat", "map", "roll", "state", "settings", "player",
+// "images". Pictures the player adds ride along with their next message, so Claude sees them.
 import { EventEmitter } from "node:events";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -14,10 +15,12 @@ import { slug } from "../engine/fuzzy.js";
 import { titleOf } from "../engine/shelf.js";
 import { stamp } from "../engine/sessionlog.js";
 import { buildStorybook, readChapters } from "./storybook.js";
+import { ImageError, ImageStore } from "./images.js";
 
 export const MARK = { pause: "[pause]", idle: "[idle]", idleStop: "[idle-stop]", superseded: "[superseded]" };
 const CHAT_MAX = 100;
 const TRAY = /^(\d{0,2})d(4|6|8|10|12|20|100)$/;
+const MAX_ATTACH = 3;
 /** The only notes sections the page may ever show: the player's sheet and journal. Never DM Secrets. */
 export const SHEET_SECTIONS = ["Character", "Inventory"];
 export const JOURNAL_SECTIONS = ["Quests", "NPCs", "World Notes", "Story Log"];
@@ -50,6 +53,8 @@ export class Game extends EventEmitter {
     this.waiter = null;
     this.queue = [];
     this.pendingRolls = [];
+    this.images = new ImageStore(dir);
+    this.pendingImages = []; // [{ id, kind: "chat"|"portrait"|"map", map? }]
     this.idle = 0;
     this.pauseRequested = false;
     this.seq = this.chat.at(-1)?.id ?? 0;
@@ -89,14 +94,25 @@ export class Game extends EventEmitter {
   // ---------- what the page sees ----------
 
   mapView() {
-    return buildMapView(this.table.campaign, activeMap(this.table.campaign), { units: this.settings.units });
+    const map = activeMap(this.table.campaign);
+    const v = buildMapView(this.table.campaign, map, { units: this.settings.units });
+    if (v.empty) return v;
+    if (map.bg && this.images.find(map.bg)) v.bg = map.bg;
+    const portrait = this.portrait();
+    if (portrait) for (const t of v.tokens) if (t.side === "player") t.portrait = portrait;
+    return v;
+  }
+
+  portrait() {
+    const id = this.table.meta.portrait;
+    return id && this.images.find(id) ? id : null;
   }
 
   /** Name, HP and conditions of the player's own token (numbers are fine: it's theirs). */
   player() {
     const t = this.table.player();
-    if (!t) return null;
-    return { id: t.id, name: t.name ?? null, hp: t.hp ?? null, maxHp: t.maxHp ?? null, status: [...(t.status ?? [])] };
+    if (!t) return this.portrait() ? { id: null, name: null, hp: null, maxHp: null, status: [], portrait: this.portrait() } : null;
+    return { id: t.id, name: t.name ?? null, hp: t.hp ?? null, maxHp: t.maxHp ?? null, status: [...(t.status ?? [])], portrait: this.portrait() };
   }
 
   /** Sheet and journal for the side panel: whitelisted campaign.md sections, comments removed. */
@@ -168,7 +184,8 @@ export class Game extends EventEmitter {
       /* chat history is a convenience; never break the game over it */
     }
     this.emit("chat", msg);
-    if (msg.who !== "system") this.table.log.transcript(msg.who === "roll" ? "Roll" : msg.who, msg.text);
+    const pics = (msg.images ?? []).map((id) => this.images.find(id)?.name).filter(Boolean).map((n) => `[picture: ${n}]`);
+    if (msg.who !== "system") this.table.log.transcript(msg.who === "roll" ? "Roll" : msg.who, [msg.text, ...pics].filter(Boolean).join(" "));
     return msg;
   }
 
@@ -214,6 +231,8 @@ export class Game extends EventEmitter {
     this.seq = Math.max(this.seq, this.chat.at(-1)?.id ?? 0);
     this.queue = [];
     this.clearPendingRolls();
+    this.pendingImages = [];
+    this.emit("images", []);
     this.sceneKey = this.#sceneKey();
     return title;
   }
@@ -234,10 +253,14 @@ export class Game extends EventEmitter {
     const notes = order.map((n) => all.find((s) => s.name === n)).filter(Boolean).map((s) => ({ name: label[s.name] ?? s.name, body: s.body }));
     let chapters = readChapters(dir, this.table.sessionIds(), this.table.meta.title ?? null);
     if (!chapters.length && this.chat.length) {
-      const entries = this.chat.filter((m) => m.who !== "system").map((m) => ({ who: m.who, text: m.text }));
+      const entries = this.chat
+        .filter((m) => m.who !== "system")
+        .map((m) => ({ who: m.who, text: [m.text, ...(m.images ?? []).map((id) => this.images.find(id)?.name).filter(Boolean).map((n) => `[picture: ${n}]`)].filter(Boolean).join(" ") }));
       chapters = [{ id: stamp(new Date(this.chat[0].t ?? this.now())), entries }];
     }
-    const html = buildStorybook({ title, hero, sections: notes, chapters, made: new Date(this.now()) });
+    const picture = (name) => this.images.dataUri(/^images\/([a-f0-9]{16})\./.exec(name)?.[1]);
+    const portrait = this.portrait() ? this.images.dataUri(this.portrait()) : null;
+    const html = buildStorybook({ title, hero, sections: notes, chapters, made: new Date(this.now()), picture, portrait });
     const name = `${slug(title) || "campaign"}-${stamp(new Date(this.now()))}.html`;
     const file = path.join(dir, "storybooks", name);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -279,24 +302,27 @@ export class Game extends EventEmitter {
 
   // ---------- the turn ----------
 
-  #resolve(text) {
+  /** Answer the waiting turn with a marker string or a player message { text, images }. */
+  #resolve(reply) {
     const w = this.waiter;
     if (!w) return false;
     this.waiter = null;
     clearTimeout(w.timer);
     clearInterval(w.tick);
-    w.resolve(text);
+    w.resolve(typeof reply === "string" ? { text: reply, images: [] } : reply);
     this.#emitState();
     return true;
   }
 
   #drain() {
-    return this.queue.splice(0).join("\n");
+    const all = this.queue.splice(0);
+    return { text: all.map((m) => m.text).join("\n"), images: all.flatMap((m) => m.images) };
   }
 
   /**
    * Publish `say` and apply `map`; then (if wait) block until the player answers.
-   * Resolves { text, isError? }. Throws LockedError if the other app holds the campaign.
+   * Resolves { text, images, isError? } (images: picture ids the player sent). Throws LockedError
+   * if the other app holds the campaign.
    */
   async turn({ say, map, wait = true } = {}, { progress, signal } = {}) {
     this.table.enter();
@@ -315,16 +341,19 @@ export class Game extends EventEmitter {
       if (res.info.length) head.push(`(map: ${res.info.join("; ")})`);
     }
     if (say && String(say).trim()) this.dm(say);
-    const out = (t) => ({ text: [...head, t].filter(Boolean).join("\n") || "ok" });
+    const out = (t, images = []) => ({ text: [...head, t].filter(Boolean).join("\n") || "ok", images });
     if (!wait) return out("");
     if (this.pauseRequested) {
       this.pauseRequested = false;
       this.#emitState();
       return out(MARK.pause);
     }
-    if (this.queue.length) return out(this.#drain());
+    if (this.queue.length) {
+      const m = this.#drain();
+      return out(m.text, m.images);
+    }
     if (this.waiter) this.#resolve(MARK.superseded);
-    const text = await new Promise((resolve) => {
+    const reply = await new Promise((resolve) => {
       const since = this.now();
       const w = { resolve, since };
       w.timer = setTimeout(() => {
@@ -341,26 +370,90 @@ export class Game extends EventEmitter {
       this.waiter = w;
       this.#emitState();
     });
-    return out(text);
+    return out(reply.text, reply.images);
   }
 
   // ---------- from the page ----------
 
-  /** A player message. Returns false if empty. Dice-tray rolls ride along with it. */
+  /** A player message. Returns false if empty. Dice-tray rolls and added pictures ride along with it. */
   playerMessage(raw) {
     const text = String(raw ?? "").trim().slice(0, 2000);
-    if (!text) return false;
-    this.#push({ who: "player", text });
+    const pics = this.pendingImages.splice(0);
+    if (!text && !pics.length) return false;
+    this.#push({ who: "player", text, ...(pics.length ? { images: pics.map((p) => p.id) } : {}) });
     // a literal "[pause]" typed by the player must not look like a control marker
     const safe = /^\[(pause|idle|idle-stop|superseded)\]$/i.test(text) ? `"${text}"` : text;
     const rolls = this.pendingRolls.splice(0);
-    const full = [safe, ...rolls].join(" ");
+    const chatPics = pics.filter((p) => p.kind === "chat").length;
+    const notes = [
+      chatPics ? `[${chatPics} picture${chatPics > 1 ? "s" : ""} attached]` : null,
+      pics.some((p) => p.kind === "portrait") ? "[I set this picture as my character portrait]" : null,
+      ...pics.filter((p) => p.kind === "map").map((p) => `[I put this picture on the map '${p.map}' as its background]`),
+    ];
+    const full = [safe, ...rolls, ...notes].filter(Boolean).join(" ");
     if (rolls.length) this.emit("pending", []);
+    if (pics.length) this.emit("images", []);
     this.idle = 0;
     if (this.status === "idle-stop") writeFlag(this.config.dataDir, { idleStop: false });
-    if (!this.#resolve(full)) this.queue.push(full);
+    const reply = { text: full, images: pics.map((p) => p.id) };
+    if (!this.#resolve(reply)) this.queue.push(reply);
     this.#emitState();
     return true;
+  }
+
+  // ---------- pictures ----------
+
+  pendingImagesView() {
+    return this.pendingImages.map(({ id, kind }) => ({ id, kind }));
+  }
+
+  /**
+   * Add a picture from the page. kind "chat": goes with the next message (max 3). "portrait": the
+   * character's picture (sheet and map token). "map": the current map's background. The DM sees
+   * portrait and map pictures with the next message too. Throws ImageError.
+   */
+  addImage(data, kind = "chat") {
+    if (!["chat", "portrait", "map"].includes(kind)) throw new ImageError(`unknown picture kind '${kind}'`);
+    if (kind === "chat" && this.pendingImages.filter((p) => p.kind === "chat").length >= MAX_ATTACH) throw new ImageError(`up to ${MAX_ATTACH} pictures per message`);
+    this.table.enter();
+    const map = kind === "map" ? activeMap(this.table.campaign) : null;
+    if (kind === "map" && !map) throw new ImageError("there's no map yet to put a picture on");
+    const id = this.images.save(data);
+    if (kind === "portrait") {
+      this.table.meta.portrait = id;
+      this.pendingImages = this.pendingImages.filter((p) => p.kind !== "portrait");
+    }
+    if (kind === "map") {
+      map.bg = id;
+      this.pendingImages = this.pendingImages.filter((p) => !(p.kind === "map" && p.map === map.name));
+    }
+    if (kind !== "chat") {
+      this.table.save();
+      this.mapChanged();
+    }
+    this.pendingImages.push({ id, kind, ...(map ? { map: map.name } : {}) });
+    this.emit("images", this.pendingImagesView());
+    return id;
+  }
+
+  /** Take a picture back off the next message (a portrait or map picture stays set). */
+  removePendingImage(id) {
+    this.pendingImages = this.pendingImages.filter((p) => p.id !== id);
+    this.emit("images", this.pendingImagesView());
+  }
+
+  /** Remove the character portrait or the current map's background picture. */
+  clearImage(kind) {
+    this.table.enter();
+    if (kind === "portrait") delete this.table.meta.portrait;
+    else if (kind === "map") {
+      const map = activeMap(this.table.campaign);
+      if (map) delete map.bg;
+    } else throw new ImageError(`unknown picture kind '${kind}'`);
+    this.pendingImages = this.pendingImages.filter((p) => p.kind !== kind);
+    this.table.save();
+    this.mapChanged();
+    this.emit("images", this.pendingImagesView());
   }
 
   /** Dice tray: rolled on the server, attached to the player's next message. */

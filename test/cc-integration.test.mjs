@@ -18,7 +18,7 @@ let dataDir;
 let stderr = "";
 const call = async (name, args = {}) => {
   const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 60000 });
-  return { ...r, text: r.content.map((c) => c.text).join("\n") };
+  return { ...r, text: r.content.filter((c) => c.type === "text").map((c) => c.text).join("\n") };
 };
 
 function runHook(input, env = {}) {
@@ -83,6 +83,16 @@ test("scripted game: new campaign, turns through the page, rolls, idle, idle-sto
   await post(origin, "/api/say", { text: "I move to 3x4 and ready my bow" }, { token });
   const r1 = await t1;
   assert.match(r1.text, /^\(map: player1 3x2; wolf1 3x9\)\nI move to 3x4 and ready my bow \[rolled 1d20: \d+\]$/);
+
+  // a picture from the page reaches Claude as an image block with the next message
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const tPic = call("turn", { say: "Show me." });
+  await page.next("state", (s) => s.waiting, { from: page.events.length });
+  assert.equal((await post(origin, "/api/image", { data: PNG }, { token })).status, 200);
+  await post(origin, "/api/say", { text: "This is my map" }, { token });
+  const rPic = await tPic;
+  assert.equal(rPic.text, "This is my map [1 picture attached]");
+  assert.deepEqual(rPic.content.filter((c) => c.type === "image").map((c) => [c.mimeType, c.data]), [["image/png", PNG]]);
 
   // Claude's rolls show on the page; secret ones never do
   const before = page.events.length;

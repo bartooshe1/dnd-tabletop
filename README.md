@@ -54,6 +54,7 @@ What the game page has:
 - **Battle map** with textured terrain, shimmering water, flickering fire and a **turn-order strip** in combat. The token whose turn it is gets a gold ring.
 - **Character sheet** (stats, attacks, features, inventory) with an **XP bar**. When you have enough XP, a **Level up!** button opens a guide: roll or take average HP, pick an ability increase or feat, subclass and spells, then send it all to the DM.
 - **Journal** tab: quests, people you've met, places and lore, and the story so far.
+- **Pictures:** 📎 next to the message box (or paste / drag a picture in) sends up to 3 pictures with your message, and the DM sees them. Click your character's circle on the sheet to give them a **portrait** (it also shows on your map token), and 🖼 on the map puts **your own map picture** under the grid. Pictures are shrunk in the browser first (each costs Claude about 1,000–1,600 tokens) and kept in the `images/` folder.
 - **Condition help:** hover over or tap "prone", "poisoned" and so on to see what it does.
 - **Resizable layout:** drag the bars between chat, rolls, map and sheet.
 - **Settings (⚙):**

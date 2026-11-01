@@ -257,3 +257,23 @@ body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select:
 .set-head { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); margin: 4px 0 2px; }
 .settings input[type="range"] { width: 160px; accent-color: var(--gold); }
 .camp { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 14px; }
+
+/* pictures */
+.composer .attach { flex: none; font-size: 16px; padding: 0 9px; }
+.chat.dropping { outline: 2px dashed var(--gold); outline-offset: -4px; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.thumb { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255,255,255,.15); cursor: zoom-in; display: block; background: #0c0d10; }
+.pthumb { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
+.pthumb .thumb { width: 56px; height: 44px; }
+.pthumb-label { font-size: 10px; color: var(--muted); }
+.pthumb-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); background: #2a2e36; font-size: 10px; line-height: 1; padding: 0; cursor: pointer; }
+.lightbox { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+.lightbox[hidden] { display: none; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+.sheet-who { display: flex; align-items: center; gap: 12px; }
+.portrait { flex: none; width: 64px; height: 64px; border-radius: 50%; padding: 0; overflow: hidden; border: 2px solid #3b82f6; background: #1b1e24; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; }
+.portrait img { width: 100%; height: 100%; object-fit: cover; }
+.portrait.empty { border-style: dashed; border-color: #4a5468; color: var(--muted); }
+.portrait:hover { border-color: var(--gold); }
+.sheet-who .btn.small { margin-top: 4px; }
+.pface { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1.5px solid #3b82f6; }

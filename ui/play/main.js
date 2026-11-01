@@ -100,7 +100,18 @@ const pendingEl = h("div", { class: "pending", hidden: true });
 const narrow = matchMedia("(max-width: 600px)").matches;
 const input = h("textarea", { rows: "1", placeholder: narrow ? "What do you do?" : "What do you do?  (click the map to add a square like 4x8)", "aria-label": "Your action", maxlength: "2000" });
 const sendBtn = h("button", { class: "btn send", type: "submit" }, "Send");
-const composer = h("form", { class: "composer" }, input, sendBtn);
+// one hidden file picker for every kind of picture; `pickFor` says what the next pick is for
+const filePick = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true });
+let pickFor = "chat";
+const choosePictures = (kind) => {
+  pickFor = kind;
+  filePick.multiple = kind === "chat";
+  filePick.value = "";
+  filePick.click();
+};
+filePick.addEventListener("change", () => addPictures([...filePick.files], pickFor));
+const attachBtn = h("button", { class: "btn icon attach", type: "button", title: "Add a picture for the DM (or paste / drop one)", "aria-label": "Add a picture", onclick: () => choosePictures("chat") }, "📎");
+const composer = h("form", { class: "composer" }, attachBtn, input, sendBtn, filePick);
 const chat = h("section", { class: "chat" }, log, pendingEl, composer);
 
 const trayEl = h(
@@ -121,6 +132,13 @@ const mapTools = h(
   h("button", { class: "btn icon", type: "button", title: "Fit", onclick: () => mapApi.fit() }, "Fit"),
   h("button", { class: "btn icon", type: "button", title: "Zoom in", "aria-label": "Zoom in", onclick: () => mapApi.zoomBy(1.25) }, "+"),
 );
+const mapPicBtn = h("button", { class: "btn icon", type: "button", title: "Put a picture on this map (its background)", "aria-label": "Map picture", onclick: () => choosePictures("map") }, "🖼");
+const mapPicClear = h(
+  "button",
+  { class: "btn icon", type: "button", title: "Remove the map picture", "aria-label": "Remove the map picture", hidden: true, onclick: () => confirm("Remove the picture from this map?") && api("/api/image/clear", { kind: "map" }) },
+  "✕🖼",
+);
+mapTools.prepend(mapPicBtn, mapPicClear);
 const emptyEl = h("div", { class: "empty" }, h("div", { class: "empty-icon" }, "🗺"), h("div", {}, "Waiting for the Dungeon Master..."));
 const stage = h("div", { class: "stage" }, emptyEl);
 const legendEl = h("div", { class: "legend" });
@@ -182,6 +200,7 @@ function connect() {
   es.addEventListener("settings", (e) => setSettings(JSON.parse(e.data)));
   es.addEventListener("player", (e) => setPlayer(JSON.parse(e.data)));
   es.addEventListener("pending", (e) => setPending(JSON.parse(e.data)));
+  es.addEventListener("images", (e) => setPendingImages(JSON.parse(e.data)));
   es.addEventListener("sheet", (e) => setSheet(JSON.parse(e.data)));
   es.onopen = () => {
     S.connected = true;
@@ -243,6 +262,7 @@ function applySnapshot(s) {
   setSettings(s.settings);
   setState(s.state, { initial: true });
   setPlayer(s.player);
+  S.pendingImages = s.images ?? [];
   setPending(s.pending ?? []);
   setSheet(s.sheet);
   setMap(s.map);
@@ -254,7 +274,12 @@ function addMessage(m, { live }) {
   S.lastChatId = m.id ?? S.lastChatId;
   let el;
   if (m.who === "dm") el = h("div", { class: "msg dm" }, markdown(m.text));
-  else if (m.who === "player") el = h("div", { class: "msg me" }, h("div", { class: "bubble" }, m.text));
+  else if (m.who === "player")
+    el = h(
+      "div",
+      { class: "msg me" },
+      h("div", { class: "bubble" }, m.text || null, m.images?.length ? h("div", { class: "thumbs" }, m.images.map((id) => thumb(id))) : null),
+    );
   else if (m.who === "roll") el = h("div", { class: "msg roll" }, `🎲 ${m.text}`);
   else if (m.who === "scene") el = h("div", { class: "msg scene" }, h("span", {}, m.text));
   else el = h("div", { class: "msg system" }, m.text);
@@ -311,7 +336,7 @@ addEventListener("keydown", (e) => {
 composer.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !S.pendingImages.length) return;
   finishTyping();
   input.value = "";
   autosize();
@@ -374,16 +399,141 @@ function showLatest(r, { animate }) {
   latestEl.replaceChildren(h("div", { class: "latest-head" }, who, r.label ? h("span", { class: "muted" }, r.label) : null), el);
 }
 
+S.pendingRolls = [];
+S.pendingImages = [];
 function setPending(list) {
+  S.pendingRolls = list;
+  renderPending();
+}
+function setPendingImages(list) {
+  S.pendingImages = list;
+  renderPending();
+}
+const PIC_LABEL = { portrait: "portrait", map: "map picture" };
+function renderPending() {
+  const list = S.pendingRolls;
+  const pics = S.pendingImages;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  pendingEl.hidden = !list.length;
+  pendingEl.hidden = !list.length && !pics.length;
   pendingEl.replaceChildren(
     h("span", { class: "muted" }, "Goes with your next message:"),
     ...list.map((t) => h("span", { class: "pchip" }, t.replace(/^\[rolled /, "🎲 ").replace(/\]$/, ""))),
-    h("button", { class: "btn icon small", type: "button", title: "Discard these rolls", "aria-label": "Discard these rolls", onclick: () => api("/api/roll/clear") }, "✕"),
+    ...(list.length ? [h("button", { class: "btn icon small", type: "button", title: "Discard these rolls", "aria-label": "Discard these rolls", onclick: () => api("/api/roll/clear") }, "✕")] : []),
+    ...pics.map((p) =>
+      h(
+        "span",
+        { class: "pthumb" },
+        thumb(p.id),
+        PIC_LABEL[p.kind] ? h("span", { class: "pthumb-label" }, PIC_LABEL[p.kind]) : null,
+        h("button", { class: "pthumb-x", type: "button", title: p.kind === "chat" ? "Don't send this picture" : "Don't show this to the DM (it stays set)", "aria-label": "Remove picture", onclick: () => api("/api/image/remove", { id: p.id }) }, "✕"),
+      ),
+    ),
   );
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
+
+// ---------- pictures ----------
+const imgUrl = (id) => `/img/${id}${S.token ? `?t=${encodeURIComponent(S.token)}` : ""}`;
+
+function thumb(id) {
+  return h("img", { class: "thumb", src: imgUrl(id), alt: "picture", loading: "lazy", onclick: (e) => (e.stopPropagation(), openLightbox(id)) });
+}
+
+const lightbox = h("div", { class: "lightbox", hidden: true, role: "dialog", "aria-label": "Picture", onclick: () => (lightbox.hidden = true) });
+document.body.append(lightbox);
+function openLightbox(id) {
+  lightbox.replaceChildren(h("img", { src: imgUrl(id), alt: "picture" }));
+  lightbox.hidden = false;
+}
+addEventListener("keydown", (e) => e.key === "Escape" && (lightbox.hidden = true));
+
+/** Longest side, by use: what Claude reads best, a crisp map, a small portrait. */
+const MAX_SIDE = { chat: 1568, map: 2048, portrait: 512 };
+
+/** Shrink a picture in the browser (also turns phone photos upright) and return base64. */
+async function shrink(file, kind) {
+  const max = MAX_SIDE[kind] ?? 1568;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => bad(new Error("not a picture this browser can open"));
+      i.src = url;
+    });
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const hgt = Math.max(1, Math.round(img.naturalHeight * scale));
+    // a small PNG (pixel art, a drawn map, transparency) is sent as it is
+    if (scale === 1 && file.type === "image/png" && file.size < 1.5 * 1024 * 1024) return await toBase64(file);
+    const c = h("canvas");
+    c.width = w;
+    c.height = hgt;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, w, hgt);
+    g.drawImage(img, 0, 0, w, hgt);
+    const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.86));
+    return await toBase64(blob);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function toBase64(blob) {
+  return new Promise((ok, bad) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => bad(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+/** Add pictures from the file picker, a paste or a drop. kind: chat | portrait | map. */
+async function addPictures(files, kind = "chat") {
+  const pics = files.filter((f) => f.type.startsWith("image/")).slice(0, kind === "chat" ? 3 : 1);
+  if (!pics.length) return;
+  if (!S.token) return showBanner("This page needs the link from Claude Code (it has a ?t= code).", "warn");
+  showBanner(pics.length > 1 ? `Adding ${pics.length} pictures…` : "Adding the picture…", "info");
+  for (const f of pics) {
+    let data;
+    try {
+      data = await shrink(f, kind);
+    } catch (e) {
+      return showBanner(`Couldn't read ${f.name || "that picture"}: ${e.message}`, "warn");
+    }
+    let r;
+    try {
+      r = await fetch("/api/image", { method: "POST", headers: { "content-type": "application/json", "x-dnd-token": S.token }, body: JSON.stringify({ data, kind }) });
+    } catch {
+      return showBanner("Can't reach the game. Is Claude Code still running?", "warn");
+    }
+    if (!r.ok) return showBanner(r.status === 413 ? "That picture is too big." : (await r.text().catch(() => "")) || "The game didn't take that picture.", "warn");
+  }
+  showBanner("");
+  if (kind === "chat") input.focus({ preventScroll: true });
+}
+
+input.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  e.preventDefault();
+  addPictures(files, "chat");
+});
+chat.addEventListener("dragover", (e) => {
+  if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) {
+    e.preventDefault();
+    chat.classList.add("dropping");
+  }
+});
+chat.addEventListener("dragleave", (e) => e.target === chat && chat.classList.remove("dropping"));
+chat.addEventListener("drop", (e) => {
+  chat.classList.remove("dropping");
+  const files = [...(e.dataTransfer?.files ?? [])];
+  if (!files.length) return;
+  e.preventDefault();
+  addPictures(files, "chat");
+});
 
 // ---------- map / player / state ----------
 function setMap(v) {
@@ -402,7 +552,8 @@ function setMap(v) {
   mapName.textContent = v.name;
   mapMeta.textContent = ` · ${v.cols}×${v.rows} · 1 sq = ${scaleText(v)}`;
   legendEl.replaceChildren(...legendItems(v));
-  mapApi.render(v);
+  mapPicClear.hidden = !v.bg;
+  mapApi.render({ ...v, bgUrl: v.bg ? imgUrl(v.bg) : null, tokens: v.tokens.map((t) => (t.portrait ? { ...t, portraitUrl: imgUrl(t.portrait) } : t)) });
 }
 
 // ---------- character sheet and journal ----------
@@ -446,8 +597,12 @@ function renderSheet() {
   const p = S.player;
   const hasHp = p && typeof p.hp === "number";
   const pct = hasHp && p.maxHp ? Math.max(0, Math.min(100, (p.hp / p.maxHp) * 100)) : 0;
+  const face = p?.portrait
+    ? h("button", { class: "portrait", type: "button", title: "Change your character's picture", onclick: () => choosePictures("portrait") }, h("img", { src: imgUrl(p.portrait), alt: "" }))
+    : h("button", { class: "portrait empty", type: "button", title: "Add a picture of your character", onclick: () => choosePictures("portrait") }, "📷");
+  const faceRemove = p?.portrait ? h("button", { class: "btn small", type: "button", onclick: () => confirm("Remove your character's picture?") && api("/api/image/clear", { kind: "portrait" }) }, "Remove picture") : null;
   sheetHead.replaceChildren(...[
-    h("div", { class: "sheet-name" }, p?.name || "Your character"),
+    h("div", { class: "sheet-who" }, face, h("div", {}, h("div", { class: "sheet-name" }, p?.name || "Your character"), faceRemove)),
     hasHp
       ? h("div", { class: "sheet-hp" }, h("span", { class: "hp-bar big" }, h("span", { class: `hp-fill${pct <= 25 ? " low" : ""}`, style: `width:${pct}%` })), h("b", {}, `${p.hp}/${p.maxHp ?? "?"}`), " HP")
       : null,
@@ -574,6 +729,7 @@ function renderPlayerStrip() {
   const pct = hasHp && p.maxHp ? Math.max(0, Math.min(100, (p.hp / p.maxHp) * 100)) : 0;
   const prog = progress();
   playerEl.replaceChildren(
+    p.portrait ? h("img", { class: "pface", src: imgUrl(p.portrait), alt: "" }) : null,
     h("span", { class: "pname" }, p.name || "You"),
     hasHp
       ? h("span", { class: "hp", title: "Hit points" }, h("span", { class: "hp-bar" }, h("span", { class: `hp-fill${pct <= 25 ? " low" : ""}`, style: `width:${pct}%` })), `${p.hp}/${p.maxHp ?? "?"} HP`)

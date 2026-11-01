@@ -77,9 +77,17 @@ const dayOf = (id) => {
   return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 };
 
-function entryHtml(e, hero) {
+const PIC = /\s*\[picture: (images\/[a-f0-9]{16}\.(?:jpg|png|gif|webp))\]/g;
+
+function entryHtml(e, hero, picture) {
   if (e.who === "dm") return `<div class="dm">${mdToHtml(e.text)}</div>`;
-  if (e.who === "player") return `<div class="me"><span class="who">${esc(hero)}</span>${inline(e.text).replace(/\n/g, "<br>")}</div>`;
+  if (e.who === "player") {
+    // pictures the player added: embedded, so the book stays one self-contained file
+    const pics = [...e.text.matchAll(PIC)].map((m) => picture?.(m[1])).filter(Boolean);
+    const text = e.text.replace(PIC, "").trim();
+    const imgs = pics.length ? `<div class="pics">${pics.map((src) => `<img src="${esc(src)}" alt="">`).join("")}</div>` : "";
+    return `<div class="me"><span class="who">${esc(hero)}</span>${inline(text).replace(/\n/g, "<br>")}${imgs}</div>`;
+  }
   if (e.who === "roll") return `<div class="roll">🎲 ${inline(e.text)}</div>`;
   if (e.who === "scene") return `<div class="scene">${inline(e.text)}</div>`;
   return "";
@@ -89,11 +97,11 @@ function entryHtml(e, hero) {
  * Build the storybook. `sections`: [{ name, body }] (already whitelisted); `chapters`:
  * [{ id, entries }]. Returns the HTML document.
  */
-export function buildStorybook({ title, hero, sections, chapters, made = new Date() }) {
+export function buildStorybook({ title, hero, sections, chapters, made = new Date(), picture = null, portrait = null }) {
   const notes = sections.filter((s) => s.body.trim());
   const toc = chapters.map((c, i) => `<li><a href="#ch${i + 1}">Chapter ${i + 1}</a> <span>${esc(dayOf(c.id))}</span></li>`).join("");
   const body = chapters
-    .map((c, i) => `<section class="chapter" id="ch${i + 1}"><h2>Chapter ${i + 1}</h2><p class="date">${esc(dayOf(c.id))}</p>${c.entries.map((e) => entryHtml(e, hero)).join("\n")}</section>`)
+    .map((c, i) => `<section class="chapter" id="ch${i + 1}"><h2>Chapter ${i + 1}</h2><p class="date">${esc(dayOf(c.id))}</p>${c.entries.map((e) => entryHtml(e, hero, picture)).join("\n")}</section>`)
     .join("\n");
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -124,10 +132,14 @@ blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--
 code { font-size: .9em; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
 .notes { font-size: 15.5px; }
+.portrait { display: block; width: 140px; height: 140px; object-fit: cover; border-radius: 50%; margin: 0 auto 12px; border: 3px solid var(--gold); }
+.pics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-style: normal; }
+.pics img { max-width: 100%; max-height: 360px; border-radius: 6px; border: 1px solid var(--line); }
 @media print { body { background: #fff; color: #000; } .chapter { page-break-before: always; } }
 </style></head>
 <body><main>
 <h1>${esc(title)}</h1>
+${portrait ? `<img class="portrait" src="${esc(portrait)}" alt="${esc(hero)}">` : ""}
 <p class="sub">The story of ${esc(hero)} · made ${esc(made.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }))}</p>
 ${chapters.length ? `<h3>Chapters</h3><ul class="toc">${toc}</ul>` : ""}
 ${notes.length ? `<div class="notes">${notes.map((s) => `<h3>${esc(s.name)}</h3>${mdToHtml(s.body)}`).join("\n")}</div>` : ""}

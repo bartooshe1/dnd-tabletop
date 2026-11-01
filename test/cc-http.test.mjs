@@ -236,3 +236,26 @@ test("phone links: home Wi-Fi first, then Tailscale, then private VM/WSL address
   const rank = { lan: 0, tailscale: 1, private: 2 };
   for (let i = 1; i < ips.length; i++) assert.ok(rank[addressKind(ips[i - 1])] <= rank[addressKind(ips[i])], `sorted: ${ips.join(", ")}`);
 });
+
+test("pictures over HTTP: upload needs the token, bad files are refused, LAN reads need the token", async () => {
+  const { game, origin } = await setup({ lan: true });
+  game.newCampaign();
+  const t = game.pageToken();
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  assert.equal((await post(origin, "/api/image", { data: PNG })).status, 403, "no token, no upload");
+  const bad = await post(origin, `/api/image?t=${t}`, { data: Buffer.from("not a picture").toString("base64") }, { token: t });
+  assert.equal(bad.status, 400);
+  assert.match(await bad.text(), /isn't a JPEG/);
+  const r = await post(origin, `/api/image?t=${t}`, { data: PNG }, { token: t });
+  const { id } = await r.json();
+  assert.match(id, /^[a-f0-9]{16}$/);
+  assert.equal((await fetch(`${origin}/img/${id}`)).status, 403, "LAN: pictures need the token too");
+  const img = await fetch(`${origin}/img/${id}?t=${t}`);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/png");
+  assert.equal((await fetch(`${origin}/img/../../campaign.json?t=${t}`)).status, 404);
+  assert.equal((await fetch(`${origin}/img/0000000000000000?t=${t}`)).status, 404);
+  const big = await post(origin, `/api/image?t=${t}`, { data: "A".repeat(10 * 1024 * 1024) }, { token: t });
+  assert.equal(big.status, 413);
+  assert.match((await fetch(`${origin}/?t=${t}`)).headers.get("content-security-policy"), /img-src 'self' data: blob:/);
+});
